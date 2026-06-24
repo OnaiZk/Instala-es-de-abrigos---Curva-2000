@@ -22,20 +22,21 @@ import OpecManagementView from './components/OpecManagementView';
 import { ReportsView } from './components/ReportsView';
 import { DailyReportView } from './components/DailyReportView';
 import { RouteControlView } from './components/RouteControlView';
+import { HomeView } from './components/HomeView';
 import { supabase } from './api/supabaseClient';
 import { ThemeProvider, companyThemes } from './contexts/ThemeContext';
-import { LogOut, LayoutGrid, Users, Map as MapIcon, ClipboardList, ShieldCheck, Building2, Activity, Loader2, X, Settings, Calculator, Menu, ChevronLeft, ChevronRight, Car, Smartphone, FileSpreadsheet, ListTodo, Map, DollarSign } from 'lucide-react';
+import { LogOut, LayoutGrid, Users, Map as MapIcon, ClipboardList, ShieldCheck, Building2, Activity, Loader2, X, Settings, Calculator, Menu, ChevronLeft, ChevronRight, Car, Smartphone, FileSpreadsheet, ListTodo, Map, DollarSign, Home } from 'lucide-react';
 import { getTasksByUserId, getTeams, getAllUsers, createTeam, updateTeam, deleteTeam } from './api/fieldManagerApi';
 import { useOfflineSync } from './hooks/useOfflineSync';
 
-type Tab = 'dashboard' | 'equipes' | 'mapa' | 'os' | 'monitoramento' | 'medicao' | 'funcionarios' | 'veiculos' | 'opec' | 'reports' | 'daily_report' | 'route_control';
+type Tab = 'home' | 'dashboard' | 'equipes' | 'mapa' | 'os' | 'monitoramento' | 'medicao' | 'funcionarios' | 'veiculos' | 'opec' | 'reports' | 'daily_report' | 'route_control';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [activeTab, setActiveTab] = useState<Tab>('home');
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -115,15 +116,18 @@ const App: React.FC = () => {
 
       if (profile && !error) {
         console.log('Profile loaded successfully:', profile);
+        const role = profile.role as UserRole;
+        const isTech = role === UserRole.TECNICO || role === UserRole.PARCEIRO_TECNICO;
         setCurrentUser({
           id: profile.id,
           name: profile.name,
           email: profile.email,
-          role: profile.role as UserRole,
+          role: role,
           companyId: profile.company_id,
           companyName: profile.company_name,
           avatar: profile.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}`,
         });
+        setActiveTab(isTech ? 'dashboard' : 'home');
       } else {
         console.error('Profile not found or error fetching:', { userId, error });
         // If profile is missing (PGRST116), sign out to allow fresh login/signup
@@ -357,6 +361,8 @@ const App: React.FC = () => {
         return <DailyReportView currentUser={currentUser} />;
       case 'route_control':
         return <RouteControlView currentUser={currentUser} />;
+      case 'home':
+        return <HomeView currentUser={currentUser} setActiveTab={setActiveTab} isPartner={isPartner} usersCount={visibleUsers.length} teamsCount={visibleTeams.length} />;
       case 'dashboard':
       default:
         const role = currentUser.role;
@@ -418,26 +424,18 @@ const App: React.FC = () => {
           </div>
 
           <nav className="flex-1 px-6 space-y-2">
-            <SidebarLink icon={<LayoutGrid size={20} />} label="Dashboard" active={activeTab === 'dashboard'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('dashboard')} />
-
-            {/* Technicians cannot see "Equipes" or "Mapa Operativo" */}
             {!isTechnician && (
               <>
-                <SidebarLink icon={<MapIcon size={20} />} label="Mapa Operativo" active={activeTab === 'mapa'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('mapa')} />
-                <SidebarLink icon={<ClipboardList size={20} />} label="Gestão de OS" active={activeTab === 'os'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('os')} />
+                <SidebarLink icon={<Home size={20} />} label="Início" active={activeTab === 'home'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('home')} />
                 <SidebarLink icon={<ListTodo size={20} />} label="Relatório Diário" active={activeTab === 'daily_report'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('daily_report')} />
-                <SidebarLink icon={<FileSpreadsheet size={20} />} label="Relatórios" active={activeTab === 'reports'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('reports')} />
-                <SidebarLink icon={<Calculator size={20} />} label="Medição" active={activeTab === 'medicao'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('medicao')} />
 
                 <SidebarLink icon={<Users size={20} />} label="Funcionários" active={activeTab === 'funcionarios'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('funcionarios')} />
-                <SidebarLink icon={<Users size={20} />} label="Equipes" active={activeTab === 'equipes'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('equipes')} />
                 {!isPartner && (
                   <>
                     <SidebarLink icon={<Smartphone size={20} />} label="Gestão de OPEC" active={activeTab === 'opec'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('opec')} />
                     <SidebarLink icon={<Car size={20} />} label="Controle de Frota" active={activeTab === 'veiculos'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('veiculos')} />
                   </>
                 )}
-                <SidebarLink icon={<Activity size={20} />} label="Monitoramento" active={activeTab === 'monitoramento'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('monitoramento')} />
               </>
             )}
           </nav>
@@ -529,30 +527,18 @@ const App: React.FC = () => {
           </div>
 
           <nav className="flex-1 px-6 py-8 space-y-2 overflow-y-auto">
-            <SidebarLink
-              icon={<LayoutGrid size={20} />}
-              label="Dashboard"
-              active={activeTab === 'dashboard'}
-              onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }}
-            />
-
             {!isTechnician && (
               <>
-                <SidebarLink icon={<MapIcon size={20} />} label="Mapa Operativo" active={activeTab === 'mapa'} onClick={() => { setActiveTab('mapa'); setIsMobileMenuOpen(false); }} />
-                <SidebarLink icon={<ClipboardList size={20} />} label="Gestão de OS" active={activeTab === 'os'} onClick={() => { setActiveTab('os'); setIsMobileMenuOpen(false); }} />
+                <SidebarLink icon={<Home size={20} />} label="Início" active={activeTab === 'home'} onClick={() => { setActiveTab('home'); setIsMobileMenuOpen(false); }} />
                 <SidebarLink icon={<ListTodo size={20} />} label="Relatório Diário" active={activeTab === 'daily_report'} onClick={() => { setActiveTab('daily_report'); setIsMobileMenuOpen(false); }} />
-                <SidebarLink icon={<FileSpreadsheet size={20} />} label="Relatórios" active={activeTab === 'reports'} onClick={() => { setActiveTab('reports'); setIsMobileMenuOpen(false); }} />
-                <SidebarLink icon={<Calculator size={20} />} label="Medição" active={activeTab === 'medicao'} onClick={() => { setActiveTab('medicao'); setIsMobileMenuOpen(false); }} />
 
                 <SidebarLink icon={<Users size={20} />} label="Funcionários" active={activeTab === 'funcionarios'} onClick={() => { setActiveTab('funcionarios'); setIsMobileMenuOpen(false); }} />
-                <SidebarLink icon={<Users size={20} />} label="Equipes" active={activeTab === 'equipes'} onClick={() => { setActiveTab('equipes'); setIsMobileMenuOpen(false); }} />
                 {!isPartner && (
                   <>
                     <SidebarLink icon={<Smartphone size={20} />} label="Gestão de OPEC" active={activeTab === 'opec'} onClick={() => { setActiveTab('opec'); setIsMobileMenuOpen(false); }} />
                     <SidebarLink icon={<Car size={20} />} label="Controle de Frota" active={activeTab === 'veiculos'} onClick={() => { setActiveTab('veiculos'); setIsMobileMenuOpen(false); }} />
                   </>
                 )}
-                <SidebarLink icon={<Activity size={20} />} label="Monitoramento" active={activeTab === 'monitoramento'} onClick={() => { setActiveTab('monitoramento'); setIsMobileMenuOpen(false); }} />
               </>
             )}
           </nav>
