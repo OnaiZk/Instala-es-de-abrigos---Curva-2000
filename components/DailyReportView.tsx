@@ -276,7 +276,7 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
             return;
         }
 
-        const hasExternalActivities = selectedActivities.some(a => a.activityType !== '{Interno}');
+        const hasExternalActivities = selectedActivities.some(a => a.activityType !== 'Interno' && a.activityType !== '{Interno}');
         if (hasExternalActivities && (!report?.carPlate || !report?.opecId)) {
             alert('Seleção obrigatória: Por favor, selecione o VEÍCULO e o OPEC antes de salvar o relatório.');
             return;
