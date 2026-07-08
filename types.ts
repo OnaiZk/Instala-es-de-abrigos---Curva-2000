@@ -253,6 +253,8 @@ export interface DailyReport {
   technicianIds?: string[]; // IDs of the "main" team/group for the day (optional now)
   carPlate?: string;
   opecId?: string;
+  driverId?: string;
+  driverName?: string;
   route?: string;
   notes?: string;
   companyId: string;

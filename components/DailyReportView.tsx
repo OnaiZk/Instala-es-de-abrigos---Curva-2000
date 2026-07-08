@@ -241,6 +241,8 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
             activities: [],
             carPlate: undefined,
             opecId: undefined,
+            driverId: undefined,
+            driverName: undefined,
             route: '',
             notes: ''
         });
@@ -274,7 +276,8 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
             return;
         }
 
-        if (!report?.carPlate || !report?.opecId) {
+        const hasExternalActivities = selectedActivities.some(a => a.activityType !== '{Interno}');
+        if (hasExternalActivities && (!report?.carPlate || !report?.opecId)) {
             alert('Seleção obrigatória: Por favor, selecione o VEÍCULO e o OPEC antes de salvar o relatório.');
             return;
         }
@@ -293,6 +296,8 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
                 activities: selectedActivities,
                 carPlate: report?.carPlate,
                 opecId: report?.opecId,
+                driverId: report?.driverId,
+                driverName: report?.driverName,
                 route: report?.route,
                 notes: report?.notes
             };
@@ -396,12 +401,13 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
         );
 
         // --- SHEET 1: ATIVIDADES ---
-        // Header row - REGRA 3: Inclui coluna Líder Responsável
-        const activitiesHeader = ['Data', 'Veículo', 'OPEC', 'Rota', 'Tipo de Atividade', 'Quantidade', 'Líder Responsável', 'Observações'];
-        // Use maxTechs calculated from all reports
-        for (let i = 0; i < Math.max(maxTechs, 1); i++) {
-            activitiesHeader.push(`Técnico ${i + 1}`);
+        const activitiesHeader = ['Data', 'Veículo', 'OPEC', 'Motorista'];
+        // Show Técnico 2, Técnico 3, Técnico 4 (or more if maxTechs is larger)
+        const techHeaderCount = Math.max(maxTechs - 1, 3);
+        for (let i = 2; i <= techHeaderCount + 1; i++) {
+            activitiesHeader.push(`Técnico ${i}`);
         }
+        activitiesHeader.push('Líder Responsável', 'Rota', 'Tipo de Atividade', 'Quantidade', 'Observações');
 
         const headerRow = wsActivities.getRow(startRow);
         headerRow.values = activitiesHeader;
@@ -418,26 +424,41 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
                 const activityCarInfo = a.carPlate ? vehicles.find(v => v.plate === a.carPlate) : fallbackCarInfo;
                 const activityOpecInfo = a.opecId ? opecDevices.find(o => o.id === a.opecId) : fallbackOpecInfo;
 
-                // REGRA 3: Inclui liderName no Excel
+                const leaderName = a.liderName || users.find(u => u.id === r.userId)?.name || 'Desconhecido';
+                const driverName = r.driverName || 'N/A';
+
                 const rowData: (string | number)[] = [
-                    date,
+                    r.date,
                     activityCarInfo ? `${activityCarInfo.model} (${activityCarInfo.plate})` : '',
                     activityOpecInfo ? `${activityOpecInfo.assetCode}` : '',
+                    driverName
+                ];
+
+                const techList: string[] = [];
+                if (a.technicianIds && a.technicianIds.length > 0) {
+                    a.technicianIds.forEach(tid => {
+                        if (tid !== r.driverId) {
+                            const techName = users.find(u => u.id === tid)?.name || 'Desconhecido';
+                            techList.push(techName);
+                        }
+                    });
+                } else {
+                    techList.push('Equipe Completa');
+                }
+
+                // Pad technicians to match the number of header columns
+                for (let i = 0; i < techHeaderCount; i++) {
+                    rowData.push(techList[i] || '');
+                }
+
+                // Append remaining fields
+                rowData.push(
+                    leaderName,
                     r.route || '',
                     a.activityType,
                     a.quantity,
-                    a.liderName || users.find(u => u.id === r.userId)?.name || 'Desconhecido', // Líder Responsável
                     r.notes || ''
-                ];
-
-                if (a.technicianIds && a.technicianIds.length > 0) {
-                    a.technicianIds.forEach(tid => {
-                        const techName = users.find(u => u.id === tid)?.name || 'Desconhecido';
-                        rowData.push(techName);
-                    });
-                } else {
-                    rowData.push('Equipe Completa');
-                }
+                );
 
                 wsActivities.addRow(rowData);
             });
@@ -455,9 +476,10 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
 
         participants.forEach(m => {
             const absence = absences.find(a => a.employeeId === m.id);
+            const isDriver = allDayReports.some(r => r.driverId === m.id);
             wsMembers.addRow([
                 m.name,
-                m.role.replace('PARCEIRO_', ''),
+                m.role.replace('PARCEIRO_', '') + (isDriver ? ' (Motorista)' : ''),
                 absence ? `AUSENTE: ${absence.reason}` : 'PRESENTE'
             ]);
         });
@@ -477,6 +499,7 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
             ['Equipe/Referência', teamName],
             ['Veículo (Principal)', currentCarInfo ? `${currentCarInfo.model} (${currentCarInfo.plate})` : 'N/A'],
             ['OPEC (Principal)', currentOpecInfo ? `${currentOpecInfo.assetCode} - ${currentOpecInfo.model}` : 'N/A'],
+            ['Motorista da Equipe', report?.driverName || 'N/A'],
             ['Total de Lançamentos (Dia)', allDayReports.reduce((acc, r) => acc + r.activities.length, 0)],
             ['Total de Peças/Qtd (Dia)', allDayReports.reduce((acc, r) => acc + r.activities.reduce((sum, a) => sum + a.quantity, 0), 0)],
             ['Relatórios Consolidados', allDayReports.length],
@@ -558,10 +581,12 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
             );
 
             // --- SHEET 1: ATIVIDADES ---
-            const activitiesHeader = ['Data', 'Veículo', 'OPEC', 'Rota', 'Tipo de Atividade', 'Quantidade', 'Líder Responsável', 'Observações'];
-            for (let i = 0; i < Math.max(maxTechs, 1); i++) {
-                activitiesHeader.push(`Técnico ${i + 1}`);
+            const activitiesHeader = ['Data', 'Veículo', 'OPEC', 'Motorista'];
+            const techHeaderCount = Math.max(maxTechs - 1, 3);
+            for (let i = 2; i <= techHeaderCount + 1; i++) {
+                activitiesHeader.push(`Técnico ${i}`);
             }
+            activitiesHeader.push('Líder Responsável', 'Rota', 'Tipo de Atividade', 'Quantidade', 'Observações');
 
             const headerRow = wsActivities.getRow(startRow);
             headerRow.values = activitiesHeader;
@@ -578,25 +603,39 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
                     const activityCarInfo = a.carPlate ? vehicles.find(v => v.plate === a.carPlate) : fallbackCarInfo;
                     const activityOpecInfo = a.opecId ? opecDevices.find(o => o.id === a.opecId) : fallbackOpecInfo;
 
+                    const leaderName = a.liderName || users.find(u => u.id === r.userId)?.name || 'Desconhecido';
+                    const driverName = r.driverName || 'N/A';
+
                     const rowData: (string | number)[] = [
                         r.date,
                         activityCarInfo ? `${activityCarInfo.model} (${activityCarInfo.plate})` : '',
                         activityOpecInfo ? `${activityOpecInfo.assetCode}` : '',
+                        driverName
+                    ];
+
+                    const techList: string[] = [];
+                    if (a.technicianIds && a.technicianIds.length > 0) {
+                        a.technicianIds.forEach(tid => {
+                            if (tid !== r.driverId) {
+                                const techName = users.find(u => u.id === tid)?.name || 'Desconhecido';
+                                techList.push(techName);
+                            }
+                        });
+                    } else {
+                        techList.push('Equipe Completa');
+                    }
+
+                    for (let i = 0; i < techHeaderCount; i++) {
+                        rowData.push(techList[i] || '');
+                    }
+
+                    rowData.push(
+                        leaderName,
                         r.route || '',
                         a.activityType,
                         a.quantity,
-                        a.liderName || users.find(u => u.id === r.userId)?.name || 'Desconhecido',
                         r.notes || ''
-                    ];
-
-                    if (a.technicianIds && a.technicianIds.length > 0) {
-                        a.technicianIds.forEach(tid => {
-                            const techName = users.find(u => u.id === tid)?.name || 'Desconhecido';
-                            rowData.push(techName);
-                        });
-                    } else {
-                        rowData.push('Equipe Completa');
-                    }
+                    );
 
                     wsActivities.addRow(rowData);
                 });
@@ -688,6 +727,19 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
         }
     }, [selectedTeam, selectedTechnicianIds, teams, users]);
 
+    useEffect(() => {
+        if (report?.driverId && teamMembers.length > 0) {
+            const driverExists = teamMembers.some(m => m.id === report.driverId);
+            if (!driverExists) {
+                setReport(prev => ({
+                    ...prev,
+                    driverId: undefined,
+                    driverName: undefined
+                }));
+            }
+        }
+    }, [teamMembers, report?.driverId]);
+
     const handleToggleTechnician = (techId: string) => {
         setSelectedTechnicianIds(prev => {
             if (prev.includes(techId)) {
@@ -755,6 +807,31 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
                             ? `${selectedTechnicianIds.length} Técnicos`
                             : 'Personalizar'}
                     </button>
+
+                    {teamMembers.length > 0 && (
+                        <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-2xl border border-slate-100 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <span className="text-[10px] font-black text-slate-400 uppercase ml-2">Motorista</span>
+                            <select
+                                value={report?.driverId || ''}
+                                onChange={e => {
+                                    const selectedId = e.target.value;
+                                    const selectedName = users.find(u => u.id === selectedId)?.name || '';
+                                    setReport(prev => ({
+                                        ...prev,
+                                        driverId: selectedId || undefined,
+                                        driverName: selectedName || undefined
+                                    }));
+                                }}
+                                disabled={!isToday && !isChief}
+                                className="bg-transparent border-none font-black text-slate-700 outline-none p-1 text-sm min-w-[140px]"
+                            >
+                                <option value="">Selecionar Motorista</option>
+                                {teamMembers.map(m => (
+                                    <option key={m.id} value={m.id}>{m.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     <div className="h-6 w-px bg-slate-200 mx-2 hidden md:block"></div>
 
@@ -1020,9 +1097,16 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
                                             <img src={member.avatar} alt="" className="w-8 h-8 rounded-xl" />
                                             <div>
                                                 <p className="text-xs font-black text-slate-700 leading-none">{member.name}</p>
-                                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
-                                                    {member.role.replace('PARCEIRO_', '')}
-                                                </p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase">
+                                                        {member.role.replace('PARCEIRO_', '')}
+                                                    </p>
+                                                    {report?.driverId === member.id && (
+                                                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">
+                                                            Motorista
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
 
