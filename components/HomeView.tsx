@@ -4,7 +4,7 @@ import {
   Sun, CloudRain, Cloud, CloudLightning, Clock, AlertTriangle, 
   ArrowRight, CheckCircle2, ShieldCheck, 
   MapPin, Calendar, Activity, Smartphone, Car, 
-  ListTodo, Users, Sparkles
+  ListTodo, Users, Sparkles, LayoutDashboard
 } from 'lucide-react';
 
 interface HomeViewProps {
@@ -67,7 +67,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ currentUser, setActiveTab, i
               {getGreeting()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-orange-400 font-black">{currentUser.name}</span>!
             </h2>
             <p className="text-slate-300 text-sm md:text-base max-w-xl font-medium">
-              Bem-vindo ao sistema de campo. Acesse as ferramentas de controle de equipe e relatórios diários de forma simplificada.
+              Bem-vindo ao sistema de campo. Acesse o Painel do Líder em tempo real para visualizar faltas e relatórios sem necessidade de exportar.
             </p>
           </div>
 
@@ -94,20 +94,20 @@ export const HomeView: React.FC<HomeViewProps> = ({ currentUser, setActiveTab, i
       {/* 2. Key Operational Indicators Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         
-        {/* KPI 1: Relatório Diário */}
-        <div className="bg-white border border-slate-100 rounded-3xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all group hover:-translate-y-0.5 duration-300">
+        {/* KPI 1: Painel do Líder (Destaque Principal) */}
+        <div className="bg-white border-2 border-primary/20 rounded-3xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all group hover:-translate-y-0.5 duration-300 cursor-pointer" onClick={() => setActiveTab('leader_dashboard')}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase text-slate-400 tracking-widest">Relatório Diário</span>
+            <span className="text-xs font-black uppercase text-primary tracking-widest">Painel do Líder</span>
             <div className="w-10 h-10 rounded-2xl bg-orange-50 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors duration-300">
-              <ListTodo size={20} />
+              <LayoutDashboard size={20} />
             </div>
           </div>
           <div className="mt-4">
-            <span className="text-2xl font-black text-slate-800">Lançamento</span>
-            <p className="text-xs text-slate-500 mt-1 font-medium">Controle de equipes diárias</p>
+            <span className="text-2xl font-black text-slate-800">Dashboard</span>
+            <p className="text-xs text-slate-500 mt-1 font-medium">Faltas e relatórios ao vivo</p>
           </div>
-          <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between text-xs font-bold text-slate-500 group-hover:text-primary transition-colors cursor-pointer" onClick={() => setActiveTab('daily_report')}>
-            Lançar relatório diário
+          <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between text-xs font-bold text-primary">
+            Acessar painel
             <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
           </div>
         </div>
@@ -278,6 +278,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ currentUser, setActiveTab, i
         <h3 className="text-lg font-black text-slate-800 tracking-tight">Navegação Rápida</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           
+          <button 
+            onClick={() => setActiveTab('leader_dashboard')} 
+            className="flex flex-col items-center justify-center gap-3 p-6 bg-orange-50/50 hover:bg-primary-50 border border-primary/20 hover:border-primary-300 rounded-3xl transition-all duration-300 group shadow-sm hover:shadow"
+          >
+            <div className="p-3 bg-white rounded-2xl text-primary group-hover:text-primary transition-colors shadow-sm">
+              <LayoutDashboard size={20} />
+            </div>
+            <span className="text-xs font-black text-primary group-hover:text-primary transition-colors">Painel do Líder</span>
+          </button>
+
           <button 
             onClick={() => setActiveTab('daily_report')} 
             className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 hover:bg-primary-50 border border-slate-100 hover:border-primary-200 rounded-3xl transition-all duration-300 group shadow-sm hover:shadow"

@@ -1400,6 +1400,13 @@ export const upsertDailyReport = async (report: Omit<DailyReport, 'id'>, id?: st
 };
 
 
+export const deleteDailyReport = async (reportId: string): Promise<void> => {
+    // Delete associated activities first
+    await supabase.from('daily_activities').delete().eq('report_id', reportId);
+    const { error } = await supabase.from('daily_reports').delete().eq('id', reportId);
+    if (error) throw error;
+};
+
 export const deleteAbsence = async (id: string): Promise<void> => {
     const { error } = await supabase.from('daily_absences').delete().eq('id', id);
     if (error) throw error;

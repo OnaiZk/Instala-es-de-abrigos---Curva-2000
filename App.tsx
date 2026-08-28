@@ -19,17 +19,18 @@ import { VehicleControlView } from './components/VehicleControlView';
 import OpecManagementView from './components/OpecManagementView';
 
 
+import { LeaderDashboardView } from './components/LeaderDashboardView';
 import { ReportsView } from './components/ReportsView';
 import { DailyReportView } from './components/DailyReportView';
 import { RouteControlView } from './components/RouteControlView';
 import { HomeView } from './components/HomeView';
 import { supabase } from './api/supabaseClient';
 import { ThemeProvider, companyThemes } from './contexts/ThemeContext';
-import { LogOut, LayoutGrid, Users, Map as MapIcon, ClipboardList, ShieldCheck, Building2, Activity, Loader2, X, Settings, Calculator, Menu, ChevronLeft, ChevronRight, Car, Smartphone, FileSpreadsheet, ListTodo, Map, DollarSign, Home } from 'lucide-react';
+import { LogOut, LayoutDashboard, LayoutGrid, Users, Map as MapIcon, ClipboardList, ShieldCheck, Building2, Activity, Loader2, X, Settings, Calculator, Menu, ChevronLeft, ChevronRight, Car, Smartphone, FileSpreadsheet, ListTodo, Map, DollarSign, Home } from 'lucide-react';
 import { getTasksByUserId, getTeams, getAllUsers, createTeam, updateTeam, deleteTeam } from './api/fieldManagerApi';
 import { useOfflineSync } from './hooks/useOfflineSync';
 
-type Tab = 'home' | 'dashboard' | 'equipes' | 'mapa' | 'os' | 'monitoramento' | 'medicao' | 'funcionarios' | 'veiculos' | 'opec' | 'reports' | 'daily_report' | 'route_control';
+type Tab = 'home' | 'leader_dashboard' | 'dashboard' | 'equipes' | 'mapa' | 'os' | 'monitoramento' | 'medicao' | 'funcionarios' | 'veiculos' | 'opec' | 'reports' | 'daily_report' | 'route_control';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -357,6 +358,8 @@ const App: React.FC = () => {
         return isPartner ? null : <OpecManagementView currentUser={currentUser} />;
       case 'reports':
         return <ReportsView tasks={visibleTasks} users={visibleUsers} currentUser={currentUser} />;
+      case 'leader_dashboard':
+        return <LeaderDashboardView currentUser={currentUser} onNavigateToReport={() => setActiveTab('daily_report')} />;
       case 'daily_report':
         return <DailyReportView currentUser={currentUser} />;
       case 'route_control':
@@ -427,6 +430,7 @@ const App: React.FC = () => {
             {!isTechnician && (
               <>
                 <SidebarLink icon={<Home size={20} />} label="Início" active={activeTab === 'home'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('home')} />
+                <SidebarLink icon={<LayoutDashboard size={20} />} label="Painel do Líder" active={activeTab === 'leader_dashboard'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('leader_dashboard')} />
                 <SidebarLink icon={<ListTodo size={20} />} label="Relatório Diário" active={activeTab === 'daily_report'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('daily_report')} />
 
                 <SidebarLink icon={<Users size={20} />} label="Funcionários" active={activeTab === 'funcionarios'} collapsed={isSidebarCollapsed} onClick={() => setActiveTab('funcionarios')} />
@@ -530,6 +534,7 @@ const App: React.FC = () => {
             {!isTechnician && (
               <>
                 <SidebarLink icon={<Home size={20} />} label="Início" active={activeTab === 'home'} onClick={() => { setActiveTab('home'); setIsMobileMenuOpen(false); }} />
+                <SidebarLink icon={<LayoutDashboard size={20} />} label="Painel do Líder" active={activeTab === 'leader_dashboard'} onClick={() => { setActiveTab('leader_dashboard'); setIsMobileMenuOpen(false); }} />
                 <SidebarLink icon={<ListTodo size={20} />} label="Relatório Diário" active={activeTab === 'daily_report'} onClick={() => { setActiveTab('daily_report'); setIsMobileMenuOpen(false); }} />
 
                 <SidebarLink icon={<Users size={20} />} label="Funcionários" active={activeTab === 'funcionarios'} onClick={() => { setActiveTab('funcionarios'); setIsMobileMenuOpen(false); }} />
