@@ -42,6 +42,7 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
   const currentUserIdRef = useRef<string | null>(null); // Track current user to avoid duplicate fetches
 
   // Background sync for offline evidence
@@ -51,6 +52,15 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
+    // Check if URL indicates password recovery
+    const hash = window.location.hash;
+    if (hash && (hash.includes('type=recovery') || hash.includes('access_token='))) {
+      const params = new URLSearchParams(hash.replace(/^#/, ''));
+      if (params.get('type') === 'recovery' || params.get('access_token')) {
+        setIsRecoveryMode(true);
+      }
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -81,6 +91,13 @@ const App: React.FC = () => {
       // Ignore token refresh events to prevent unnecessary reloads
       if (event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
         console.log(`[Auth] ${event}, skipping reload`);
+        return;
+      }
+
+      if (event === 'PASSWORD_RECOVERY') {
+        console.log('[Auth] Password recovery event detected');
+        setIsRecoveryMode(true);
+        setLoading(false);
         return;
       }
 
@@ -326,8 +343,17 @@ const App: React.FC = () => {
     );
   }
 
-  if (!currentUser) {
-    return <Login onLoginSuccess={(session) => fetchProfile(session.user.id)} />;
+  if (!currentUser || isRecoveryMode) {
+    return (
+      <Login
+        initialMode={isRecoveryMode ? 'reset' : 'login'}
+        onResetComplete={() => setIsRecoveryMode(false)}
+        onLoginSuccess={(session) => {
+          setIsRecoveryMode(false);
+          fetchProfile(session.user.id);
+        }}
+      />
+    );
   }
 
   const renderContent = () => {

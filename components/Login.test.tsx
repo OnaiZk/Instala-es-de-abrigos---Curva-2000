@@ -11,17 +11,43 @@ describe('Login Component', () => {
         localStorage.clear();
     });
 
-    it('renders portal selection by default', () => {
+    it('renders login form with forgot password button by default', () => {
         render(<Login onLoginSuccess={mockOnLoginSuccess} />);
-        // Use a more specific text that is likely to be a single node
-        expect(screen.getByText(/Concessão SP/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /Acesso/i })).toBeInTheDocument();
+        expect(screen.getByText(/Insira suas credenciais/i)).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(/usuario@eletromidia.com.br/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Esqueceu a senha\?/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Entrar$/i })).toBeInTheDocument();
     });
 
-    it('navigates to the internal login form when clicking Internal Portal', () => {
+    it('navigates to forgot password form when clicking "Esqueceu a senha?"', () => {
         render(<Login onLoginSuccess={mockOnLoginSuccess} />);
-        const internalBtn = screen.getByText(/Interno/i).closest('button');
-        if (internalBtn) fireEvent.click(internalBtn);
+        const forgotBtn = screen.getByRole('button', { name: /Esqueceu a senha\?/i });
+        fireEvent.click(forgotBtn);
 
-        expect(screen.getByText(/Login/i)).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /Recuperar Senha/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Enviar Instruções/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Voltar ao login/i })).toBeInTheDocument();
+    });
+
+    it('returns to login form when clicking "Voltar ao login" from forgot password', () => {
+        render(<Login onLoginSuccess={mockOnLoginSuccess} />);
+        const forgotBtn = screen.getByRole('button', { name: /Esqueceu a senha\?/i });
+        fireEvent.click(forgotBtn);
+
+        const backBtn = screen.getByRole('button', { name: /Voltar ao login/i });
+        fireEvent.click(backBtn);
+
+        expect(screen.getByRole('heading', { name: /Acesso/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^Entrar$/i })).toBeInTheDocument();
+    });
+
+    it('renders password reset form directly when initialMode is reset', () => {
+        render(<Login onLoginSuccess={mockOnLoginSuccess} initialMode="reset" />);
+        expect(screen.getByRole('heading', { name: /Nova Senha/i })).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(/Mínimo 6 caracteres/i)).toBeInTheDocument();
+        expect(screen.getByPlaceholderText(/Repita a nova senha/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Salvar Nova Senha/i })).toBeInTheDocument();
     });
 });
+
