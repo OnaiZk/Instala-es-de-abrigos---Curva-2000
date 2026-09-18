@@ -4,8 +4,30 @@ import { User, DailyReport, DailyActivity, Team, UserRole, Absence, Vehicle, Ope
 import { ACTIVITY_TYPES } from '../api/activityTypes';
 import { getTeams, getAllUsers, getDailyReportByTeamAndDate, upsertDailyReport, createAbsence, getAbsences, deleteAbsence, getVehicles, getOpecDevices, getDailyReports, getDailyReportsForMonth, subscribeToDailyActivities, deleteDailyActivity, updateDailyActivityQuantity } from '../api/fieldManagerApi';
 import { supabase } from '../api/supabaseClient';
-import { ClipboardList, Users, Calendar, Plus, Save, History, X, AlertCircle, Download, Trash2, Car, Smartphone, Search, CheckCircle, Edit2 } from 'lucide-react';
+import { ClipboardList, Users, Calendar, Plus, Save, History, X, AlertCircle, Download, Trash2, Car, Smartphone, Search, CheckCircle, Edit2, Clock, Unlock, Lock } from 'lucide-react';
 import { createEletromidiaWorkbook, styleHeaderRow, styleDataRows, autoFitColumns, saveWorkbook } from '../utils/excelExport';
+
+const getLocalDateString = (d: Date = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const getYesterdayDateString = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return getLocalDateString(d);
+};
+
+const formatDateBR = (isoDate: string) => {
+    if (!isoDate) return '';
+    const parts = isoDate.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return isoDate;
+};
 
 interface Props {
     currentUser: User;
@@ -14,7 +36,8 @@ interface Props {
 export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
     const [selectedTeam, setSelectedTeam] = useState<string>('');
     const [selectedTechnicianIds, setSelectedTechnicianIds] = useState<string[]>([]);
-    const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState<string>(getLocalDateString());
+    const [isRetroactive, setIsRetroactive] = useState(false);
     const [teams, setTeams] = useState<Team[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -39,13 +62,14 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
     const isEditingRef = useRef(false);
 
     const isToday = useMemo(() => {
-        const today = new Date().toISOString().split('T')[0];
-        return date === today;
+        return date === getLocalDateString();
     }, [date]);
 
     const isChief = currentUser.role === UserRole.CHEFE || currentUser.role === UserRole.PARCEIRO_CHEFE;
     // REGRA 2: Chefes e Líderes veem visualização consolidada
     const isLeaderOrChief = [UserRole.LIDER, UserRole.CHEFE, UserRole.PARCEIRO_LIDER, UserRole.PARCEIRO_CHEFE].includes(currentUser.role);
+    // Permissão de edição: hoje, chefe ou lançamento retroativo ativado
+    const canEdit = isToday || isChief || isRetroactive;
 
 
     useEffect(() => {
@@ -162,8 +186,8 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
     };
 
     const handleAddActivity = (activityType: string) => {
-        if (!isToday && !isChief) {
-            alert('Apenas chefes podem editar relatórios de datas passadas.');
+        if (!canEdit) {
+            alert('Edição bloqueada para esta data. Ative a opção de lançamento retroativo para preencher.');
             return;
         }
 
@@ -190,8 +214,8 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
     };
 
     const handleDeleteActivity = async (index: number) => {
-        if (!isToday && !isChief) {
-            alert('Apenas chefes podem editar relatórios de datas passadas.');
+        if (!canEdit) {
+            alert('Edição bloqueada para esta data. Ative a opção de lançamento retroativo para editar.');
             return;
         }
 
@@ -216,8 +240,8 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
 
     // Quantity change now needs index because we can have multiple of same type
     const handleQuantityChange = (index: number, quantity: number) => {
-        if (!isToday && !isChief) {
-            alert('Apenas chefes podem editar relatórios de datas passadas.');
+        if (!canEdit) {
+            alert('Edição bloqueada para esta data. Ative a opção de lançamento retroativo para editar.');
             return;
         }
         setSelectedActivities(prev => prev.map((a, i) =>
@@ -252,6 +276,10 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
     const handleEditReport = (reportToEdit: DailyReport) => {
         // Seta ref ANTES de mudar state para o useEffect não disparar loadReport
         isEditingRef.current = true;
+
+        if (!isToday && !isChief) {
+            setIsRetroactive(true);
+        }
 
         // Carrega o relatório existente no formulário para edição
         setReport(reportToEdit);
@@ -304,7 +332,10 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
 
             await upsertDailyReport(reportToSave, report?.id);
 
-            alert('Relatório salvo com sucesso!');
+            const isRetroactiveSave = !isToday;
+            alert(isRetroactiveSave
+                ? `Relatório retroativo salvo com sucesso para o dia ${formatDateBR(date)}!`
+                : 'Relatório salvo com sucesso!');
 
             // Fix: Reset form instead of reloading the same report ID
             // This allows saving multiple reports for different teams/techs in the same day without overwriting
@@ -323,8 +354,8 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
     };
 
     const handleAddAbsence = async (employeeId: string, reason: string) => {
-        if (!isToday && !isChief) {
-            alert('Apenas chefes podem editar ausências de datas passadas.');
+        if (!canEdit) {
+            alert('Edição de ausências bloqueada para esta data. Ative a opção de lançamento retroativo.');
             return;
         }
         const employee = users.find(u => u.id === employeeId);
@@ -345,8 +376,8 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
     };
 
     const handleDeleteAbsence = async (id: string) => {
-        if (!isToday && !isChief) {
-            alert('Apenas chefes podem remover ausências de datas passadas.');
+        if (!canEdit) {
+            alert('Remoção de ausências bloqueada para esta data. Ative a opção de lançamento retroativo.');
             return;
         }
         if (!confirm('Tem certeza que deseja remover esta falta?')) return;
@@ -777,11 +808,53 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
                         <input
                             type="date"
                             value={date}
-                            onChange={e => setDate(e.target.value)}
-                            max={new Date().toISOString().split('T')[0]}
+                            onChange={e => {
+                                const newDate = e.target.value;
+                                setDate(newDate);
+                                if (newDate === getLocalDateString()) {
+                                    setIsRetroactive(false);
+                                }
+                            }}
+                            max={getLocalDateString()}
                             className="bg-transparent border-none font-black text-slate-700 outline-none p-1 text-sm"
                         />
                     </div>
+
+                    {/* Botão de Atalho para Lançar Ontem */}
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const yesterday = getYesterdayDateString();
+                            setDate(yesterday);
+                            setIsRetroactive(true);
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl font-black text-xs transition-all border ${
+                            date === getYesterdayDateString() && isRetroactive
+                                ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                                : 'bg-slate-50 border-slate-100 text-slate-600 hover:border-slate-300'
+                        }`}
+                        title="Preencher relatório referente ao dia de ontem com lançamento retroativo"
+                    >
+                        <Clock size={14} />
+                        Ontem
+                    </button>
+
+                    {/* Toggle rápido de modo retroativo se estiver em data passada */}
+                    {!isToday && !isChief && (
+                        <button
+                            type="button"
+                            onClick={() => setIsRetroactive(!isRetroactive)}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl font-black text-xs transition-all border ${
+                                isRetroactive
+                                    ? 'bg-amber-50 border-amber-300 text-amber-700 shadow-sm'
+                                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300'
+                            }`}
+                            title={isRetroactive ? 'Clique para bloquear edição retroativa' : 'Clique para habilitar edição retroativa'}
+                        >
+                            {isRetroactive ? <Unlock size={14} className="text-amber-600" /> : <Lock size={14} className="text-slate-400" />}
+                            <span>{isRetroactive ? 'Retroativo Ativo' : 'Leitura'}</span>
+                        </button>
+                    )}
 
                     <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-2xl border border-slate-100">
                         <Users size={18} className="text-slate-400 ml-2" />
@@ -822,8 +895,8 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
                                         driverName: selectedName || undefined
                                     }));
                                 }}
-                                disabled={!isToday && !isChief}
-                                className="bg-transparent border-none font-black text-slate-700 outline-none p-1 text-sm min-w-[140px]"
+                                disabled={!canEdit}
+                                className="bg-transparent border-none font-black text-slate-700 outline-none p-1 text-sm min-w-[140px] disabled:opacity-50"
                             >
                                 <option value="">Selecionar Motorista</option>
                                 {teamMembers.map(m => (
@@ -865,7 +938,7 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
 
                     <button
                         onClick={handleSave}
-                        disabled={isSaving || (!isToday && !isChief)}
+                        disabled={isSaving || !canEdit}
                         className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-2xl font-black text-sm hover:bg-primary-600 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:grayscale"
                     >
                         {isSaving ? <History className="animate-spin" /> : <Save size={18} />}
@@ -892,9 +965,46 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
             </div>
 
             {(!isToday && !isChief) && (
-                <div className="bg-orange-50 border border-orange-200 p-4 rounded-2xl flex items-center gap-3 text-orange-700 font-bold text-sm">
-                    <AlertCircle size={20} />
-                    Modo Leitura: Edições só são permitidas no dia vigente.
+                <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200 ${
+                    isRetroactive
+                        ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-sm'
+                        : 'bg-orange-50 border-orange-200 text-orange-800'
+                }`}>
+                    <div className="flex items-center gap-3">
+                        {isRetroactive ? (
+                            <div className="p-2 bg-amber-500 text-white rounded-xl shrink-0">
+                                <Clock size={20} />
+                            </div>
+                        ) : (
+                            <div className="p-2 bg-orange-500 text-white rounded-xl shrink-0">
+                                <AlertCircle size={20} />
+                            </div>
+                        )}
+                        <div>
+                            <p className="font-black text-sm">
+                                {isRetroactive
+                                    ? `Modo de Lançamento Retroativo Ativo (${formatDateBR(date)})`
+                                    : `Modo Leitura: Data Anterior (${formatDateBR(date)})`}
+                            </p>
+                            <p className="text-xs font-semibold opacity-90 mt-0.5">
+                                {isRetroactive
+                                    ? 'A edição está liberada. Você pode selecionar equipe, motorista, adicionar atividades e faltas para esta data. Salve o relatório ao concluir.'
+                                    : 'Esqueceu de preencher o relatório no dia anterior? Clique na opção ao lado para habilitar o preenchimento retroativo.'}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsRetroactive(!isRetroactive)}
+                        className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 shrink-0 ${
+                            isRetroactive
+                                ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
+                                : 'bg-primary hover:bg-primary-600 text-white shadow-md shadow-primary/20 hover:scale-[1.02] active:scale-[0.98]'
+                        }`}
+                    >
+                        {isRetroactive ? <Lock size={15} /> : <Unlock size={15} />}
+                        {isRetroactive ? 'Bloquear Edição' : 'Habilitar Lançamento Retroativo'}
+                    </button>
                 </div>
             )}
 
@@ -1029,7 +1139,7 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
                                                                 <span className="text-[9px] font-bold text-slate-400 uppercase">Rota: {otherReport.route}</span>
                                                             )}
                                                         </div>
-                                                        {(isToday || isChief) && (
+                                                        {canEdit && (
                                                             <button
                                                                 onClick={() => handleEditReport(otherReport)}
                                                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all"
@@ -1127,8 +1237,8 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
                                             <div className="flex items-center gap-1">
                                                 <button
                                                     onClick={() => handleAddAbsence(member.id, 'Falta Injustificada')}
-                                                    disabled={!isToday && !isChief}
-                                                    className="p-1.5 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded-lg transition-colors"
+                                                    disabled={!canEdit}
+                                                    className="p-1.5 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded-lg transition-colors disabled:opacity-40"
                                                     title="Marcar Falta"
                                                 >
                                                     <X size={16} />
@@ -1147,18 +1257,18 @@ export const DailyReportView: React.FC<Props> = ({ currentUser }) => {
                             type="text"
                             value={report?.route || ''}
                             onChange={e => setReport(prev => ({ ...prev, route: e.target.value }))}
-                            disabled={!isToday && !isChief}
+                            disabled={!canEdit}
                             placeholder="Digite a rota manualmente..."
-                            className="w-full p-4 mb-6 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20"
+                            className="w-full p-4 mb-6 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                         />
 
                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Observação</h3>
                         <textarea
                             value={report?.notes || ''}
                             onChange={e => setReport(prev => ({ ...prev, notes: e.target.value }))}
-                            disabled={!isToday && !isChief}
+                            disabled={!canEdit}
                             placeholder="Observações adicionais..."
-                            className="w-full h-32 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+                            className="w-full h-32 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-primary/20 resize-none disabled:opacity-50"
                         />
                     </div>
                 </div>

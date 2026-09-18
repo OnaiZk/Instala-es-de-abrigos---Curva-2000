@@ -29,21 +29,20 @@ FOR SELECT USING (
     )
 );
 
--- UPDATE: Chefes editam tudo. Líderes editam qualquer um da empresa SE for HOJE.
+-- UPDATE: Chefes editam tudo. Líderes editam qualquer um da empresa (incluindo lançamentos retroativos).
 CREATE POLICY "daily_reports_update_v2" ON daily_reports
 FOR UPDATE USING (
     (SELECT role FROM profiles WHERE id = auth.uid()) IN ('CHEFE', 'PARCEIRO_CHEFE')
     OR
     (
         (SELECT role FROM profiles WHERE id = auth.uid()) IN ('LIDER', 'PARCEIRO_LIDER')
-        AND date = CURRENT_DATE
         AND company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
     )
 );
 
 -- 3. Políticas das Atividades Diárias (daily_activities)
 
--- INSERT: Permite inserir se tiver acesso de edição ao relatório pai
+-- INSERT: Permite inserir se tiver acesso de edição ao relatório pai (incluindo lançamentos retroativos)
 CREATE POLICY "daily_activities_insert_v2" ON daily_activities
 FOR INSERT WITH CHECK (
     EXISTS (
@@ -54,7 +53,6 @@ FOR INSERT WITH CHECK (
             OR
             (
                 (SELECT role FROM profiles WHERE id = auth.uid()) IN ('LIDER', 'PARCEIRO_LIDER')
-                AND dr.date = CURRENT_DATE
                 AND dr.company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
             )
         )
@@ -72,14 +70,13 @@ FOR UPDATE USING (
             OR
             (
                 (SELECT role FROM profiles WHERE id = auth.uid()) IN ('LIDER', 'PARCEIRO_LIDER')
-                AND dr.date = CURRENT_DATE
                 AND dr.company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
             )
         )
     )
 );
 
--- DELETE: Permite deletar se for chefe ou líder no dia atual
+-- DELETE: Permite deletar se for chefe ou líder da empresa
 CREATE POLICY "daily_activities_delete_v2" ON daily_activities
 FOR DELETE USING (
     (SELECT role FROM profiles WHERE id = auth.uid()) IN ('CHEFE', 'PARCEIRO_CHEFE')
@@ -89,7 +86,6 @@ FOR DELETE USING (
         AND EXISTS (
             SELECT 1 FROM daily_reports dr
             WHERE dr.id = report_id
-            AND dr.date = CURRENT_DATE
             AND dr.company_id = (SELECT company_id FROM profiles WHERE id = auth.uid())
         )
     )
