@@ -46,10 +46,25 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, initialMode = 'login', on
         }
     }, [mode]);
 
-    // Check if user reached page through a recovery redirect with URL tokens
+    // Check if user reached page through a recovery redirect with URL tokens or errors
     useEffect(() => {
         const checkRecoveryToken = async () => {
             const hash = window.location.hash;
+
+            // Check if Supabase returned an error in the hash (e.g. expired link)
+            if (hash && hash.includes('error=')) {
+                const params = new URLSearchParams(hash.replace(/^#/, ''));
+                const errorCode = params.get('error_code');
+                const errorDescription = params.get('error_description');
+                if (errorCode === 'otp_expired') {
+                    setError('O link de recuperação expirou ou já foi utilizado. Por favor, solicite um novo e-mail abaixo.');
+                } else if (errorDescription) {
+                    setError(decodeURIComponent(errorDescription.replace(/\+/g, ' ')));
+                }
+                window.history.replaceState(null, '', window.location.pathname);
+                return;
+            }
+
             if (hash && (hash.includes('type=recovery') || hash.includes('access_token='))) {
                 const params = new URLSearchParams(hash.replace(/^#/, ''));
                 const accessToken = params.get('access_token');
