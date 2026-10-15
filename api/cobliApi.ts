@@ -132,25 +132,69 @@ const normalizeBranchGroup = (rawGroup?: string | null, rawLabel?: string | null
   return trimmed || 'GERAL';
 };
 
+const COBLI_ENDPOINTS = [
+  '/api/cobli-fleet',
+  '/.netlify/functions/cobli-fleet',
+  '/api/cobli/herbie-1.1/dash/device',
+  'https://api.cobli.co/herbie-1.1/dash/device'
+];
+
+let preferredEndpoint: string | null = null;
+
+const fetchFromCobliEndpoints = async (apiKey: string): Promise< any > => {
+  const orderedEndpoints = preferredEndpoint
+    ? [preferredEndpoint, ...COBLI_ENDPOINTS.filter(e => e !== preferredEndpoint)]
+    : COBLI_ENDPOINTS;
+
+  let lastError: Error | null = null;
+
+  for (const endpoint of orderedEndpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          'cobli-api-key': apiKey,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(`Chave de API da Cobli inválida ou sem permissão (HTTP ${response.status})`);
+        }
+        lastError = new Error(`HTTP ${response.status} em ${endpoint}`);
+        continue;
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        // Rota caiu no fallback do SPA (index.html), tenta o próximo endpoint
+        continue;
+      }
+
+      const payload = await response.json();
+      if (payload && Array.isArray(payload.devices)) {
+        preferredEndpoint = endpoint;
+        return payload;
+      }
+    } catch (err: any) {
+      if (err?.message?.includes('Chave de API da Cobli inválida')) {
+        throw err;
+      }
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  throw lastError || new Error('Não foi possível conectar à API da Cobli.');
+};
+
 export const fetchCobliFleetDevices = async (customApiKey?: string): Promise<CobliFleetVehicle[]> => {
   const apiKey = (customApiKey || getCobliApiKey()).trim();
   if (!apiKey) {
     throw new Error('Chave de API da Cobli não configurada.');
   }
 
-  const response = await fetch('https://api.cobli.co/herbie-1.1/dash/device', {
-    method: 'GET',
-    headers: {
-      'cobli-api-key': apiKey,
-      'Accept': 'application/json'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Erro ao consultar API da Cobli (HTTP ${response.status})`);
-  }
-
-  const payload = await response.json();
+  const payload = await fetchFromCobliEndpoints(apiKey);
   const rawDevices: CobliRawDevice[] = Array.isArray(payload?.devices) ? payload.devices : [];
 
   return rawDevices

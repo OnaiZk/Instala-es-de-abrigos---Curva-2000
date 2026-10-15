@@ -1,6 +1,19 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/cobli-fleet"
+  to = "/.netlify/functions/cobli-fleet"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/cobli/*"
+  to = "https://api.cobli.co/:splat"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/*"

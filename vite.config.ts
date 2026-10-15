@@ -13,6 +13,13 @@ export default defineConfig(({ mode }) => {
         overlay: false,      // Disable error overlay that can cause reloads
         timeout: 60000,      // Increase WebSocket timeout
       },
+      proxy: {
+        '/api/cobli': {
+          target: 'https://api.cobli.co',
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/api\/cobli/, ''),
+        },
+      },
     },
     plugins: [
       react(),
