@@ -38,9 +38,13 @@ import {
   MapPin,
   FileText,
   Activity,
-  AlertTriangle
+  AlertTriangle,
+  Radio,
+  Navigation
 } from 'lucide-react';
 import { createEletromidiaWorkbook, styleHeaderRow, styleDataRows, autoFitColumns, saveWorkbook } from '../utils/excelExport';
+import { CobliFleetMap } from './CobliFleetMap';
+import { normalizePlate } from '../api/cobliApi';
 
 interface LeaderDashboardViewProps {
   currentUser: User;
@@ -49,7 +53,7 @@ interface LeaderDashboardViewProps {
 
 export const LeaderDashboardView: React.FC<LeaderDashboardViewProps> = ({ currentUser, onNavigateToReport }) => {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [activeTab, setActiveTab] = useState<'reports' | 'absences' | 'vehicles' | 'teams'>('reports');
+  const [activeTab, setActiveTab] = useState<'reports' | 'absences' | 'fleet_map' | 'vehicles' | 'teams'>('reports');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -625,6 +629,19 @@ export const LeaderDashboardView: React.FC<LeaderDashboardViewProps> = ({ curren
         </button>
 
         <button
+          onClick={() => setActiveTab('fleet_map')}
+          className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+            activeTab === 'fleet_map'
+              ? 'bg-slate-900 text-white shadow-md'
+              : 'text-slate-600 hover:text-slate-900 bg-emerald-50/70 border border-emerald-200/70'
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+          <Navigation size={13} className={activeTab === 'fleet_map' ? 'text-primary' : 'text-emerald-600'} />
+          <span>Mapa da Frota Ao Vivo (Cobli)</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('vehicles')}
           className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
             activeTab === 'vehicles'
@@ -656,11 +673,14 @@ export const LeaderDashboardView: React.FC<LeaderDashboardViewProps> = ({ curren
             <h2 className="text-xl font-black text-slate-900 tracking-tight">
               {activeTab === 'reports' && 'Histórico de Relatórios Diários'}
               {activeTab === 'absences' && 'Registro de Faltas e Atestados do Dia'}
+              {activeTab === 'fleet_map' && 'Rastreamento da Frota em Tempo Real (Cobli GPS)'}
               {activeTab === 'vehicles' && 'Acompanhamento de Veículos e KM'}
               {activeTab === 'teams' && 'Resumo de Produtividade por Colaborador'}
             </h2>
             <p className="text-xs text-slate-400 font-semibold">
-              Visualize todos os envios e registros sem necessidade de exportar relatórios.
+              {activeTab === 'fleet_map'
+                ? 'Localização ao vivo de todos os carros da frota cruzada automaticamente com os relatórios e equipes do dia.'
+                : 'Visualize todos os envios e registros sem necessidade de exportar relatórios.'}
             </p>
           </div>
 
@@ -708,30 +728,32 @@ export const LeaderDashboardView: React.FC<LeaderDashboardViewProps> = ({ curren
         </div>
 
         {/* Search Bar */}
-        <div className="relative">
-          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder={
-              activeTab === 'reports'
-                ? 'Buscar por líder, técnico, placa do veículo, OPEC ou tipo de atividade...'
-                : activeTab === 'absences'
-                ? 'Buscar por nome do colaborador, motivo ou observação...'
-                : 'Buscar...'
-            }
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
+        {activeTab !== 'fleet_map' && (
+          <div className="relative">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder={
+                activeTab === 'reports'
+                  ? 'Buscar por líder, técnico, placa do veículo, OPEC ou tipo de atividade...'
+                  : activeTab === 'absences'
+                  ? 'Buscar por nome do colaborador, motivo ou observação...'
+                  : 'Buscar...'
+              }
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* 5. TAB 1: RELATÓRIOS DIÁRIOS */}
         {activeTab === 'reports' && (
@@ -1015,76 +1037,120 @@ export const LeaderDashboardView: React.FC<LeaderDashboardViewProps> = ({ curren
           </div>
         )}
 
-        {/* 7. TAB 3: VEÍCULOS & FROTA */}
+        {/* 7A. TAB: MAPA DA FROTA AO VIVO (COBLI) */}
+        {activeTab === 'fleet_map' && (
+          <CobliFleetMap
+            dailyReports={dailyReports}
+            vehicles={vehicles}
+            vehicleLogs={vehicleLogs}
+            users={users}
+            opecDevices={opecDevices}
+            selectedDate={selectedDate}
+            onSelectReport={(report) => setSelectedReportForDetails(report)}
+          />
+        )}
+
+        {/* 7B. TAB: VEÍCULOS & FROTA */}
         {activeTab === 'vehicles' && (
-          <div className="overflow-x-auto">
-            {loading ? (
-              <div className="py-16 flex flex-col items-center justify-center gap-3">
-                <RefreshCw size={24} className="animate-spin text-primary" />
-                <span className="text-xs font-black uppercase tracking-widest text-slate-400">Carregando frota...</span>
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900 text-white p-4 rounded-2xl shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400">
+                  <Navigation size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
+                    Rastreamento Cobli Integrado
+                    <span className="px-2 py-0.5 bg-emerald-500 text-slate-950 rounded-full text-[9px] font-black">
+                      AO VIVO
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-300 font-medium">
+                    Acompanhe no mapa onde estão todos os carros da frota agora, velocidade e ignição.
+                  </p>
+                </div>
               </div>
-            ) : vehicles.length === 0 ? (
-              <div className="py-16 text-center text-slate-400">Nenhum veículo cadastrado na empresa.</div>
-            ) : (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                    <th className="py-3 px-4">Veículo / Modelo</th>
-                    <th className="py-3 px-4">Placa</th>
-                    <th className="py-3 px-4">Status Hoje</th>
-                    <th className="py-3 px-4">KM Atual</th>
-                    <th className="py-3 px-4">Última Revisão</th>
-                    <th className="py-3 px-4">Uso no Dia ({selectedDate})</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                  {vehicles.map((v) => {
-                    const isUsedToday = activeVehiclesToday.includes(v.plate);
-                    return (
-                      <tr key={v.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-4 px-4 font-black text-slate-900">
-                          <div className="flex items-center gap-2">
-                            <Car size={16} className="text-slate-400" />
-                            <span>{v.model}</span>
-                          </div>
-                        </td>
-                        <td className="py-4 px-4 font-mono font-bold text-slate-900">
-                          <span className="px-2 py-0.5 bg-slate-100 rounded border border-slate-200">
-                            {v.plate}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                            v.status === 'Em Uso' || isUsedToday
-                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                              : v.status === 'Em Manutenção'
-                              ? 'bg-red-50 text-red-700 border border-red-200'
-                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          }`}>
-                            {isUsedToday ? 'EM ROTA' : v.status}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 font-mono text-slate-600">
-                          {v.currentKm ? `${v.currentKm.toLocaleString('pt-BR')} km` : 'N/A'}
-                        </td>
-                        <td className="py-4 px-4 font-mono text-slate-400">
-                          {v.lastMaintenanceKm ? `${v.lastMaintenanceKm.toLocaleString('pt-BR')} km` : 'N/A'}
-                        </td>
-                        <td className="py-4 px-4">
-                          {isUsedToday ? (
-                            <span className="text-emerald-600 font-bold flex items-center gap-1">
-                              <CheckCircle2 size={13} /> Vinculado a relatórios hoje
+              <button
+                onClick={() => setActiveTab('fleet_map')}
+                className="px-4 py-2.5 bg-primary hover:bg-primary-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 shrink-0 shadow-md shadow-primary/20"
+              >
+                <MapPin size={14} />
+                Abrir Mapa em Tempo Real
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              {loading ? (
+                <div className="py-16 flex flex-col items-center justify-center gap-3">
+                  <RefreshCw size={24} className="animate-spin text-primary" />
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-400">Carregando frota...</span>
+                </div>
+              ) : vehicles.length === 0 ? (
+                <div className="py-16 text-center text-slate-400">Nenhum veículo cadastrado na empresa.</div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      <th className="py-3 px-4">Veículo / Modelo</th>
+                      <th className="py-3 px-4">Placa</th>
+                      <th className="py-3 px-4">Status Hoje</th>
+                      <th className="py-3 px-4">KM Atual</th>
+                      <th className="py-3 px-4">Última Revisão</th>
+                      <th className="py-3 px-4">Uso no Dia ({selectedDate})</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                    {vehicles.map((v) => {
+                      const normV = normalizePlate(v.plate);
+                      const isUsedToday = activeVehiclesToday.some(
+                        p => p === v.plate || (normV && normalizePlate(p) === normV)
+                      );
+                      return (
+                        <tr key={v.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-4 px-4 font-black text-slate-900">
+                            <div className="flex items-center gap-2">
+                              <Car size={16} className="text-slate-400" />
+                              <span>{v.model}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 font-mono font-bold text-slate-900">
+                            <span className="px-2 py-0.5 bg-slate-100 rounded border border-slate-200">
+                              {v.plate}
                             </span>
-                          ) : (
-                            <span className="text-slate-400 italic">Sem saída registrada</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+                          </td>
+                          <td className="py-4 px-4">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                              v.status === 'Em Uso' || isUsedToday
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : v.status === 'Em Manutenção'
+                                ? 'bg-red-50 text-red-700 border border-red-200'
+                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            }`}>
+                              {isUsedToday ? 'EM ROTA' : v.status}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 font-mono text-slate-600">
+                            {v.currentKm ? `${v.currentKm.toLocaleString('pt-BR')} km` : 'N/A'}
+                          </td>
+                          <td className="py-4 px-4 font-mono text-slate-400">
+                            {v.lastMaintenanceKm ? `${v.lastMaintenanceKm.toLocaleString('pt-BR')} km` : 'N/A'}
+                          </td>
+                          <td className="py-4 px-4">
+                            {isUsedToday ? (
+                              <span className="text-emerald-600 font-bold flex items-center gap-1">
+                                <CheckCircle2 size={13} /> Vinculado a relatórios hoje
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic">Sem saída registrada</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         )}
 
